@@ -28,8 +28,8 @@ user1 = {'name_real': 'meman',
          'key_usage': '',
          'subkey_type': 'RSA',
          'subkey_length': 2048,
-         'subkey_usage': 'encrypt,sign,auth'}
-         #'passphrase': 'foobar'}
+         'subkey_usage': 'encrypt,sign,auth',
+         'passphrase': 'foobar'}
 
 class gb_cloud():
     # class functions
@@ -38,13 +38,14 @@ class gb_cloud():
         gauth.LocalWebserverAuth()  # creates local web server
         self.drive = GoogleDrive(gauth)
         
-
-    def upload(self, localFilePath, cloudFilePath):
+    def upload ( self, localFile, cloudFilePath,key_dir,key_id ):
         # upload from the local user space to the google cloud
         try:
-            logger.info('Upload Starting for ' + localFilePath)
-            self.drive.uploadFile(cloudFilePath, localFilePath)
+            encryted_filename = self.encrypt_file(localFile, key_dir, key_id)
+            logger.info('Upload Starting for ' + encryted_filename)
+            self.drive.uploadFile(cloudFilePath, encryted_filename)
             logger.info('Upload Complete')
+            return encryted_filename
         except:
             logger.error('Upload Failed, Unexpected Error: s%', sys.exc_info()[0])
             raise
@@ -126,22 +127,30 @@ class gb_cloud():
         logger.info('Private Keys: %s\n', private_keys)
 
     # To encrypt a file - need to know the fingerprint_id of the user
-    
-    def encrypt_file(self, keydir, input_file, key):
-       
+    def encrypt_file(self, input_file, keydir, key):
         gpg = gnupg.GPG(gnupghome=keydir, gpgbinary='/usr/local/bin/gpg')   
         encrypted_file = input_file + '.pgp'
-      
+        
         # Open input file
         file_stream = open(input_file, 'rb')
         enc_ascii_data = gpg.encrypt_file(file_stream, str(key), output=encrypted_file)
         file_stream.close()
-
         return encrypted_file
 
-    # To decrypt file
-    # TODO - Add decrypt method
+    def decrypt_file(self, encrypted_file, keydir, key):
+       
+        gpg = gnupg.GPG(gnupghome=keydir, gpgbinary='/usr/local/bin/gpg')   
+        decrypted_file = 'decrypted_file'
+        
+        # Open input file     
+        with open(encrypted_file, 'rb') as f:
+            status = gpg.decrypt_file(f, passphrase=user1.passphrase, output=decrypted_file)
 
+            print 'ok: ', status.ok
+            print 'status: ', status.status
+            print 'stderr: ', status.stderr
+            
+        return decrypted_file
 
 # Main
 def main(argv):
@@ -186,18 +195,14 @@ def main(argv):
     handle.uploadPublicKey(clientId1)
 
     if args.upload and os.path.isfile(args.file):
-        logger.debug('Upload File to Cloud\n')
-        #Encrypt file
-        enc_filename = handle.encrypt_file('keys', fn, key_id) 
+        logger.debug('Upload File to Cloud ' + fn)
+        #Encrypt and Upload file
+        enc_filename = handle.upload(fn, upload_path, 'keys', key_id)
         
-        #Upload file
-        handle.upload(enc_filename, upload_path)
     elif args.download and os.path.isfile(args.file):
         logger.debug('Download\n')
         #Download file
-        #handle.download(args.file, download_path)
-        #Decrypt File
-        #TBD
-
+        handle.download(args.file, download_path)
+       
 if __name__ == '__main__':
     main(sys.argv)
