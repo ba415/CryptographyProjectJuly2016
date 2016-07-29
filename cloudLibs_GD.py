@@ -41,21 +41,25 @@ class gb_cloud():
     def upload ( self, localFile, cloudFilePath,key_dir,key_id ):
         # upload from the local user space to the google cloud
         try:
+            logger.info('Encryption Starting for ' + localFile)
             encryted_filename = self.encrypt_file(localFile, key_dir, key_id)
-            logger.info('Upload Starting for ' + encryted_filename)
+            logger.info('Encryption complete, Upload Starting for ' + localFile)
             self.drive.uploadFile(cloudFilePath, encryted_filename)
-            logger.info('Upload Complete')
+            logger.info('Upload Keys Complete')
             return encryted_filename
         except:
             logger.error('Upload Failed, Unexpected Error: s%', sys.exc_info()[0])
             raise
 
-    def download(self, cloudFilePath, localFilePath):
+    def download(self, localFile, cloudFilePath, key_dir, key_id):
         # download from the cloud to your local user space
         try:
-            logger.info('Download Starting')
-            self.drive.downloadFile(cloudFilePath, localFilePath)
-            logger.info('Download Complete ')
+            logger.info('Download Starting for ' + localFile + ' cloud File path: ' + cloudFilePath )
+            self.drive.downloadFile(cloudFilePath, localFile)
+          
+            logger.info('Download Complete, Decryption Starting ' + localFile)
+            plaintext_filename = self.decrypt_file(localFile, key_dir, key_id)
+            logger.info('Decryption Complete')
         except:
             logger.error('Download Failed, Unexpected Error: %s', sys.exc_info()[0])
             raise
@@ -128,29 +132,34 @@ class gb_cloud():
 
     # To encrypt a file - need to know the fingerprint_id of the user
     def encrypt_file(self, input_file, keydir, key):
+        logger.debug('encrypt file ' + input_file )
         gpg = gnupg.GPG(gnupghome=keydir, gpgbinary='/usr/local/bin/gpg')   
-        encrypted_file = input_file + '.pgp'
+        encrypted_file = input_file 
         
         # Open input file
         file_stream = open(input_file, 'rb')
         enc_ascii_data = gpg.encrypt_file(file_stream, str(key), output=encrypted_file)
         file_stream.close()
+        logger.debug('encrypt file completed ' + encrypted_file )
         return encrypted_file
 
     def decrypt_file(self, encrypted_file, keydir, key):
-       
+        logger.debug('decrypt file ' + encrypted_file )
         gpg = gnupg.GPG(gnupghome=keydir, gpgbinary='/usr/local/bin/gpg')   
-        decrypted_file = 'decrypted_file'
+
+        file = encrypted_file.strip('.txt')
+        os.rename(encrypted_file, file)
         
         # Open input file     
-        with open(encrypted_file, 'rb') as f:
-            status = gpg.decrypt_file(f, passphrase=user1.passphrase, output=decrypted_file)
+        with open(file, 'rb') as f:
+            status = gpg.decrypt_file(f, passphrase='foobar', output=file)
 
             print 'ok: ', status.ok
             print 'status: ', status.status
             print 'stderr: ', status.stderr
-            
-        return decrypted_file
+        
+        logger.debug('output file ' + file )
+        return file
 
 # Main
 def main(argv):
@@ -178,7 +187,7 @@ def main(argv):
     logger.debug("ClientId -> %s", clientId2)
 
     #Upload path - Remove hard-coded path
-    upload_path = 'CryptoProjectDrive/' + fn + '.pgp'
+    upload_path = 'CryptoProjectDrive/' + fn + '.txt'
     logger.debug("upload_path -> %s", upload_path)
 
     #Download path - Remove hard-coded path
@@ -194,15 +203,17 @@ def main(argv):
     handle.export_keys(keysdir, str(key_id))
     handle.uploadPublicKey(clientId1)
 
-    if args.upload and os.path.isfile(args.file):
+    logger.debug("filename %s", fn)
+    if args.upload and os.path.isfile(fn):
         logger.debug('Upload File to Cloud ' + fn)
         #Encrypt and Upload file
         enc_filename = handle.upload(fn, upload_path, 'keys', key_id)
         
-    elif args.download and os.path.isfile(args.file):
-        logger.debug('Download\n')
+    elif args.download:
+        logger.debug('Download File From Cloud' + download_path)
         #Download file
-        handle.download(args.file, download_path)
+        
+        handle.download(fn, download_path, 'keys', key_id)
        
 if __name__ == '__main__':
     main(sys.argv)
